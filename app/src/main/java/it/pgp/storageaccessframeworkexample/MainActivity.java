@@ -31,6 +31,7 @@ public class MainActivity extends Activity {
     EditText srcDirLocal,destDirExt;
     EditText targetFilename;
     TextView listedContent;
+    EditText subpathToList;
 
     public void updateUriPermissions() {
         uris.clear();
@@ -53,6 +54,8 @@ public class MainActivity extends Activity {
 
         srcDirLocal = findViewById(R.id.srcDirLocal);
         destDirExt = findViewById(R.id.destDirExt);
+
+        subpathToList = findViewById(R.id.subpathToList);
 
         findViewById(R.id.mkdirButton).setOnClickListener(v-> createFileOrDirectory(true));
         findViewById(R.id.mkfileButton).setOnClickListener(v-> createFileOrDirectory(false));
@@ -83,15 +86,25 @@ public class MainActivity extends Activity {
     public void listExtSdCard(View unused) {
         if(!checkSAFPermissions()) return;
 
+        String s = subpathToList.getText().toString();
         StringBuilder sb = new StringBuilder();
-        for (Uri uri : uris) {
-            DocumentFile pickedDir = DocumentFile.fromTreeUri(this, uri);
+
+        Uri firstUri = uris.iterator().next();
+        DocumentFile pickedDir = DocumentFile.fromTreeUri(this, firstUri);
+
+        if(!s.isEmpty()) pickedDir = pathConcat(pickedDir,s,true);
+
+        try {
             // List all existing files inside picked directory
             for (DocumentFile file : pickedDir.listFiles()) {
-                String msg = "Found file " + file.getName() + " with size " + file.length();
+                String msg = "Found "+(file.isDirectory()?"dir ":"file ")+file.getName() + " with size " + file.length();
                 sb.append(msg).append("\n");
                 Log.e("EXTSD", msg);
             }
+        }
+        catch(Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Unable to list folder content for "+(pickedDir==null?"null":pickedDir.getUri()), Toast.LENGTH_SHORT).show();
         }
         listedContent.setText(sb.toString());
     }
@@ -117,7 +130,7 @@ public class MainActivity extends Activity {
 
     // pathMustExist: true by default, if not supplied
     public DocumentFile pathConcat(DocumentFile dir, String subpath, boolean... pathMustExist_) {
-        boolean pathMustExist = pathMustExist_.length == 0 || pathMustExist_[0];
+        boolean pathMustExist = pathMustExist_.length == 0 || pathMustExist_[0]; // pathMustExist: true by default
         if(!pathMustExist) {
             String id = DocumentsContract.getTreeDocumentId(dir.getUri()) + (subpath.startsWith("/")?subpath:("/"+subpath));
 
@@ -178,7 +191,9 @@ public class MainActivity extends Activity {
             if (efd == 1) throw new IOException("Target path "+destDir+"/"+srcFile.getName()+" already exists and is a file");
             if (efd == 0) destDir.createDirectory(srcFile.getName());
             // FIXME remember to manually set runtime permissions for internal storage access from app settings
-            for (File child : srcFile.listFiles()) { // copy each child INTO the newly created dir
+            File[] files = srcFile.listFiles();
+            if(files==null) throw new IOException("Inaccessible path: "+srcFile);
+            for (File child : files) { // copy each child INTO the newly created dir
                 copyFileOrDirectory(child,pathConcat(destDir,srcFile.getName()));
             }
         }
@@ -250,8 +265,11 @@ public class MainActivity extends Activity {
     }
 
     public void listRemovableDriveRootPaths(View unused) {
-        String x = Utils.getFirstExternalStoragePath(getApplicationContext(),true);
-        Toast.makeText(this, "External path is: "+x, Toast.LENGTH_SHORT).show();
+//        String x = Utils.getFirstExternalStoragePath(getApplicationContext(),true);
+        String x = "";
+        for (String y : Utils.getAllExternalStoragePaths(getApplicationContext(),true))
+            x += y+"\n";
+        Toast.makeText(this, "External paths:\n"+x, Toast.LENGTH_SHORT).show();
     }
 
     public void copyDirFromLocalToExt(View unused) {
